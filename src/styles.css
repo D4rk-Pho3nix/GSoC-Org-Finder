@@ -528,8 +528,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',sans-
 
 #back-to-top-btn {
   position: fixed;
-  bottom: 24px;
-  right: 24px;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  left: 24px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -690,6 +690,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',sans-
   /* Footer */
   footer{padding:20px 12px}
   .footer-inner{flex-direction:column;gap:4px;text-align:center;font-size:11px}
+  #back-to-top-btn{left:12px;bottom:calc(12px + env(safe-area-inset-bottom))}
 
   /* Issues page */
   .issues-controls{flex-direction:column;align-items:stretch;gap:8px}
@@ -722,31 +723,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Plus Jakarta Sans',sans-
   .org-card{display:flex;flex-direction:column;height:100%;padding:12px}
   .org-logo{width:34px;height:34px}
   .org-name{font-size:12px}
-}
-
-/* Style of scroll-to-top button */
-.scroll-top-btn {
-  position: fixed;
-  bottom: 28px;
-  right: 24px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--orange);
-  color: white;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
-  display: none;
-  z-index: 50;
-  box-shadow: 0 3px 10px rgba(244,107,14,.35);
-  transition: opacity .2s;
-}
-
-.scroll-top-btn.visible {
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* ═══════════════════════════════════════════
