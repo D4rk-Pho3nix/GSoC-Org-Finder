@@ -1421,6 +1421,57 @@ function renderModalHeader(org) {
       `;
 }
 globalThis.renderModalHeader = renderModalHeader;
+
+// ── Mobile stack helpers ──────────────────────────────────────
+const STACK_LABELS = ['Timeline', 'Mentors', 'Ideal Fit'];
+
+function setStackCard(idx) {
+  const cards = document.querySelectorAll('.stack-card');
+  const dots  = document.querySelectorAll('.stack-dot');
+  const label = document.getElementById('mStackLabel');
+  cards.forEach((c, i) => {
+    c.classList.remove('active', 'prev');
+    if (i < idx) c.classList.add('prev');
+    else if (i === idx) c.classList.add('active');
+  });
+  dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+  if (label) label.textContent = STACK_LABELS[idx] || '';
+}
+
+function advanceStack(dir) {
+  const cards = document.querySelectorAll('.stack-card');
+  const current = Array.from(cards).findIndex(c => c.classList.contains('active'));
+  const next = Math.max(0, Math.min(cards.length - 1, current + dir));
+  if (next !== current) setStackCard(next);
+}
+
+function initMobileStack() {
+  const viewport = document.getElementById('mStackViewport');
+  if (!viewport) return;
+  document.querySelectorAll('.stack-dot').forEach(dot => {
+    dot.onclick = () => setStackCard(Number(dot.dataset.idx));
+  });
+  let startY = 0;
+  viewport._touchStart = e => { startY = e.touches[0].clientY; };
+  viewport._touchEnd   = e => {
+    const delta = e.changedTouches[0].clientY - startY;
+    if (delta < -30) advanceStack(1);
+    else if (delta > 30) advanceStack(-1);
+  };
+  viewport.addEventListener('touchstart', viewport._touchStart, { passive: true });
+  viewport.addEventListener('touchend',   viewport._touchEnd,   { passive: true });
+}
+
+function resetMobileStack() {
+  const viewport = document.getElementById('mStackViewport');
+  if (viewport) {
+    if (viewport._touchStart) viewport.removeEventListener('touchstart', viewport._touchStart);
+    if (viewport._touchEnd)   viewport.removeEventListener('touchend',   viewport._touchEnd);
+  }
+  setStackCard(0);
+}
+// ─────────────────────────────────────────────────────────────
+
 globalThis.openModal = function (name, triggerElement = null) {
   const org = ORGS.find(o => o.name === name);
   if (!org) return;
@@ -1435,6 +1486,8 @@ globalThis.openModal = function (name, triggerElement = null) {
 
   const mDesc = document.getElementById('mDesc');
   if (mDesc) mDesc.textContent = org.desc;
+  const mDescMobile = document.getElementById('mDescMobile');
+  if (mDescMobile) mDescMobile.textContent = org.desc;
 
   const cc = { hot: 'var(--red)', moderate: '#92600A', chill: 'var(--green)' };
   const mMetrics = document.getElementById('mMetrics');
@@ -1477,7 +1530,10 @@ globalThis.openModal = function (name, triggerElement = null) {
   if (mTech) mTech.innerHTML = org.tags.map(t => safeHTML`<span class="tech-tag">${t}</span>`).join('');
 
   const mFit = document.getElementById('mFit');
-  if (mFit) mFit.innerHTML = org.fit.map(f => safeHTML`<span class="fit-tag">${f}</span>`).join('');
+  const fitHtml = org.fit.map(f => safeHTML`<span class="fit-tag">${f}</span>`).join('');
+  if (mFit) mFit.innerHTML = fitHtml;
+  const sIdealFit = document.getElementById('sIdealFit');
+  if (sIdealFit) sIdealFit.innerHTML = fitHtml;
 
   // Timeline list
   let timelineHtml = '';
@@ -1487,6 +1543,8 @@ globalThis.openModal = function (name, triggerElement = null) {
   }
   const mTimeline = document.getElementById('mTimeline');
   if (mTimeline) mTimeline.innerHTML = timelineHtml;
+  const sTimeline = document.getElementById('sTimeline');
+  if (sTimeline) sTimeline.innerHTML = timelineHtml;
 
   // Sanitize href links
   const ideasUrl = validateIdeasUrl(org.ideas);
@@ -1539,6 +1597,12 @@ globalThis.openModal = function (name, triggerElement = null) {
   }
 
   renderMentorContactSection(org);
+  const sMentors = document.getElementById('sMentors');
+  const mMentorsSection = document.getElementById('mMentorsSection');
+  if (sMentors && mMentorsSection) sMentors.innerHTML = mMentorsSection.innerHTML;
+
+  resetMobileStack();
+  initMobileStack();
   openModalElement('orgModal', triggerElement);
 
   // Lazily retrieve GFIs if missing
@@ -1562,6 +1626,7 @@ globalThis.openModal = function (name, triggerElement = null) {
 };
 
 function closeModal() {
+  resetMobileStack();
   closeModalElement('orgModal');
 }
 globalThis.closeModal = closeModal;
