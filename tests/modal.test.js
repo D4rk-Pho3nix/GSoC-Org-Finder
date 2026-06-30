@@ -197,6 +197,34 @@ test('fetchModalGH triggers live stats endpoint and populates modal fields corre
   assert.strictEqual(mockElements.mActivity.textContent, 'High');
   assert.strictEqual(mockElements.mFetchBtn.textContent, 'Stats Updated!');
 });
+
+test('openModal auto-fetches live stats on open with no manual click required', async () => {
+  // Seed stale state to prove it gets cleared, not left on screen.
+  mockElements.mStars.textContent = 'stale';
+  mockElements.mForks.textContent = 'stale';
+  mockElements.mIssues.textContent = 'stale';
+  mockElements.mActivity.textContent = 'stale';
+  mockElements.mFetchBtn.textContent = 'Fetch Live Stats';
+
+  app.openModal('AboutCode');
+
+  // Synchronously (before the fire-and-forget fetch resolves): loading state,
+  // no stale or fake values shown.
+  assert.strictEqual(mockElements.mStars.textContent, '');
+  assert.ok(mockElements.mStars.classList.contains('gh-stat-loading'));
+  assert.strictEqual(mockElements.mFetchBtn.textContent, 'Fetching…');
+
+  // Flush the pending fetch.
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.strictEqual(mockElements.mStars.textContent, '4.2k');
+  assert.strictEqual(mockElements.mForks.textContent, '800');
+  assert.strictEqual(mockElements.mIssues.textContent, '12');
+  assert.strictEqual(mockElements.mActivity.textContent, 'High');
+  assert.ok(!mockElements.mStars.classList.contains('gh-stat-loading'));
+  assert.strictEqual(mockElements.mFetchBtn.textContent, '↻ Refresh');
+});
+
 test('modal focus trap loops focus correctly', () => {
   const modal = mockElements.orgModal;
   const btnFirst = new StubElement('btnFirst', 'button');

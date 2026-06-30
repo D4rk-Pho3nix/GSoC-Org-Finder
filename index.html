@@ -322,10 +322,18 @@ kbd:hover{
     .metric-value { font-size: 1.25rem; font-weight: 800; color: #1a1c1c; margin-bottom: 0.2rem; }
     .metric-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: #555; }
 
-    .github-stats-container { background: #1a1a1a; border-radius: 1.5rem; padding: 1rem; color: #fff; display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; position: relative; overflow: hidden; justify-content: space-between; }
-    .gh-fetch { background: #333; color: #aaa; border: none; padding: 0.3rem 0.8rem; border-radius: 99px; font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-left: auto; align-self: flex-start; flex-shrink: 0; }
-    .gh-fetch:hover { background: #444; color: #fff; }
-    .gh-stat-item { font-family: 'Fira Code', monospace; font-size: 0.75rem; color: #4ade80; display: flex; align-items: center; gap: 0.5rem; }
+    .github-stats-container { background: #f4f1ee; border: 1px solid #e2ddd6; border-radius: 1.5rem; padding: 1rem; color: #1a1c1c; display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: center; position: relative; overflow: hidden; justify-content: space-between; }
+    .gh-fetch { background: #e2ddd6; color: #44403c; border: none; padding: 0.3rem 0.8rem; border-radius: 99px; font-size: 0.65rem; font-weight: 700; cursor: pointer; transition: all 0.2s; margin-left: auto; align-self: flex-start; flex-shrink: 0; }
+    .gh-fetch:hover { background: #d3ccc2; color: #1a1c1c; }
+    .gh-fetch:disabled { opacity: 0.6; cursor: not-allowed; }
+    .gh-stat-item { font-family: 'Fira Code', monospace; font-size: 0.75rem; color: #15803d; display: flex; align-items: center; gap: 0.5rem; }
+    .gh-activity-hot { color: #15803d; }
+    .gh-activity-normal { color: #2563eb; }
+    .gh-stat-loading { opacity: 0.55; animation: gh-stat-pulse 1.4s ease-in-out infinite; }
+    @media (prefers-reduced-motion: reduce) {
+      .gh-stat-loading { animation: none; }
+    }
+    @keyframes gh-stat-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.85; } }
 
     .tech-tags, .fit-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.2rem; }
     .tech-tag { background: #f3f4f6; color: #4b5563; font-size: 0.7rem; font-weight: 600; padding: 0.4rem 0.8rem; border-radius: 0.5rem; border: 1px solid #e5e7eb; }
@@ -634,6 +642,12 @@ kbd:hover{
     .dark .metric-card { background: #27272a; border-color: #3f3f46; }
     .dark .metric-value { color: #f4f4f5; }
     .dark .metric-label { color: #a1a1aa; }
+    .dark .github-stats-container { background: #1a1a1a; border-color: #27272a; color: #fff; }
+    .dark .gh-fetch { background: #333; color: #aaa; }
+    .dark .gh-fetch:hover { background: #444; color: #fff; }
+    .dark .gh-stat-item { color: #4ade80; }
+    .dark .gh-activity-hot { color: #4ade80; }
+    .dark .gh-activity-normal { color: #60a5fa; }
     .dark .close-btn { background: #27272a; color: #a1a1aa; }
     .dark .close-btn:hover { background: #3f3f46; color: #f4f4f5; }
     .dark .modal-footer { background: #0f0f10; border-color: #27272a; }
@@ -2073,12 +2087,12 @@ kbd:hover{
         <!-- Injected: Years, Competition, First Year, etc. -->
       </div>
       
-      <div class="github-stats-container mb-8">
-        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">star</span> <span id="mStars">---</span></div>
-        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">fork_right</span> <span id="mForks">---</span></div>
-        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">bug_report</span> <span id="mIssues">---</span></div>
-        <div class="gh-stat-item text-blue-400"><span class="material-symbols-outlined text-sm">history</span> <span id="mActivity">Moderate</span></div>
-        <button class="gh-fetch" id="mFetchBtn">Fetch Live Stats</button>
+      <div class="github-stats-container mb-8" id="mGHStats" aria-live="polite">
+        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">star</span> <span id="mStars" class="gh-stat-loading"></span></div>
+        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">fork_right</span> <span id="mForks" class="gh-stat-loading"></span></div>
+        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">bug_report</span> <span id="mIssues" class="gh-stat-loading"></span></div>
+        <div class="gh-stat-item"><span class="material-symbols-outlined text-sm">history</span> <span id="mActivity" class="gh-activity-normal gh-stat-loading"></span></div>
+        <button class="gh-fetch" id="mFetchBtn">Fetching…</button>
       </div>
 
       <div class="section-title">Description</div>
@@ -2455,6 +2469,66 @@ kbd:hover{
     const path = githubPathFromValue(value);
     return path ? `https://github.com/${path}` : null;
   }
+
+  // Live GitHub stats client — mirrored in src/js/app.js (see CONTRIBUTING.md
+  // JavaScript Logic Duplication Warning). Keep both copies in sync.
+  const API = '/api/github';
+  const ghCache = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('gaf_ghc') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+
+  function saveCache(key, value) {
+    try {
+      localStorage.setItem('gaf_ghc', JSON.stringify(ghCache));
+    } catch (e) {
+      if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+        console.warn('LocalStorage quota exceeded, clearing GitHub cache...');
+        for (const k in ghCache) delete ghCache[k];
+        if (key && value !== undefined) ghCache[key] = value;
+        try {
+          localStorage.setItem('gaf_ghc', JSON.stringify(ghCache));
+        } catch (err) {
+          console.error('Failed to save even after clearing cache', err);
+        }
+      }
+    }
+  }
+
+  function cleanCache() {
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    let changed = false;
+    for (const key in ghCache) {
+      const entry = ghCache[key];
+      if (!entry || typeof entry.ts !== 'number' || Number.isNaN(entry.ts) || now - entry.ts > ONE_DAY) {
+        delete ghCache[key];
+        changed = true;
+      }
+    }
+    if (changed) saveCache();
+  }
+  cleanCache();
+
+  async function fetchGH(repo) {
+    if (!repo) return null;
+    if (ghCache[repo] && Date.now() - ghCache[repo].ts < 3600000) return ghCache[repo];
+    try {
+      const r = await fetch(`${API}?repo=${encodeURIComponent(repo)}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      if (d.error) return null;
+      d.ts = Date.now();
+      ghCache[repo] = d;
+      saveCache(repo, d);
+      return d;
+    } catch { return null; }
+  }
+
+  function fmt(n) { return (!n && n !== 0) ? '—' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n); }
 
   const CATEGORY_META = {
     science: { className: 'bg-blue-100 text-blue-700', label: 'Science' },
@@ -4388,6 +4462,8 @@ if(org.ideas){
     document.body.classList.add('modal-open');
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
+
+    autoLoadModalGH(org);
   }
 
   function closeOrgModal() {
@@ -4748,43 +4824,79 @@ if(org.ideas){
     }
   }
 
-  // Live GitHub Stats Mock/Fetch
-  async function fetchStats() {
+  // Live GitHub Stats — auto-fetched on modal open, cache-first (1h TTL).
+  // Mirrored in src/js/app.js (see CONTRIBUTING.md JavaScript Logic Duplication Warning).
+  function setGHStatsLoading() {
+    const container = document.getElementById('mGHStats');
+    if (container) container.setAttribute('aria-busy', 'true');
+    ['mStars', 'mForks', 'mIssues'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = ''; el.classList.add('gh-stat-loading'); }
+    });
+    const mActivity = document.getElementById('mActivity');
+    if (mActivity) { mActivity.textContent = ''; mActivity.className = 'gh-activity-normal gh-stat-loading'; }
     const btn = document.getElementById('mFetchBtn');
-    const orgName = document.querySelector('#mHeader h2').textContent;
-    const org = ORGS.find(o => o.name === orgName);
-    if (!org) return;
+    if (btn) { btn.textContent = 'Fetching…'; btn.disabled = true; }
+  }
 
-    btn.textContent = 'Fetching...';
-    btn.disabled = true;
+  function paintGHStats(org, d) {
+    org._gh = d;
+    const container = document.getElementById('mGHStats');
+    if (container) container.removeAttribute('aria-busy');
+    const mStars = document.getElementById('mStars');
+    const mForks = document.getElementById('mForks');
+    const mIssues = document.getElementById('mIssues');
+    const mActivity = document.getElementById('mActivity');
+    if (mStars) { mStars.textContent = fmt(d.stars); mStars.classList.remove('gh-stat-loading'); }
+    if (mForks) { mForks.textContent = fmt(d.forks); mForks.classList.remove('gh-stat-loading'); }
+    if (mIssues) { mIssues.textContent = fmt(d.issues); mIssues.classList.remove('gh-stat-loading'); }
+    if (mActivity) {
+      const act = d.activity || 'moderate';
+      mActivity.textContent = act.charAt(0).toUpperCase() + act.slice(1);
+      mActivity.className = act === 'active' || act === 'high' || act === 'hot' ? 'gh-activity-hot' : 'gh-activity-normal';
+    }
+    const btn = document.getElementById('mFetchBtn');
+    if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
+  }
 
-    try {
-      // Simulate real fetch delay
-      await new Promise(r => setTimeout(r, 1200));
-      
-      // Since no token, we simulate random but realistic growth
-      const stars = (Math.random() * 5000 + 1000).toFixed(0);
-      const forks = (stars * 0.2).toFixed(0);
-      const issues = (Math.random() * 50 + 10).toFixed(0);
-      
-      document.getElementById('mStars').textContent = `${(stars/1000).toFixed(1)}k`;
-      document.getElementById('mForks').textContent = forks;
-      document.getElementById('mIssues').textContent = issues;
-      document.getElementById('mActivity').textContent = 'High';
-      document.getElementById('mActivity').className = 'gh-stat-item text-green-400';
-      
-      btn.textContent = 'Stats Updated!';
-    } catch (e) {
-      btn.textContent = 'Error';
-    } finally {
-      setTimeout(() => {
-        btn.textContent = 'Fetch Live Stats';
-        btn.disabled = false;
-      }, 3000);
+  function showGHStatsError() {
+    const container = document.getElementById('mGHStats');
+    if (container) container.removeAttribute('aria-busy');
+    ['mStars', 'mForks', 'mIssues'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.textContent = '—'; el.classList.remove('gh-stat-loading'); }
+    });
+    const mActivity = document.getElementById('mActivity');
+    if (mActivity) { mActivity.textContent = '—'; mActivity.className = 'gh-activity-normal'; }
+    const btn = document.getElementById('mFetchBtn');
+    if (btn) { btn.textContent = 'Retry'; btn.disabled = false; }
+  }
+
+  async function autoLoadModalGH(org) {
+    if (!org.github) return;
+
+    const cached = ghCache[org.github];
+    if (cached && Date.now() - cached.ts < 3600000) {
+      paintGHStats(org, cached);
+      return;
+    }
+
+    setGHStatsLoading();
+    const d = await fetchGH(org.github);
+    if (d) {
+      paintGHStats(org, d);
+    } else {
+      showGHStatsError();
     }
   }
 
-  document.getElementById('mFetchBtn').addEventListener('click', fetchStats);
+  document.getElementById('mFetchBtn').addEventListener('click', () => {
+    const orgName = document.querySelector('#mHeader h2').textContent;
+    const org = ORGS.find(o => o.name === orgName);
+    if (!org || !org.github) return;
+    delete ghCache[org.github];
+    autoLoadModalGH(org);
+  });
 
   // Proposal
   let currentProposalOrg = '';

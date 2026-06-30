@@ -1321,13 +1321,13 @@ function updateModalGHStats(org, d, gfi) {
   const mIssues = document.getElementById('mIssues');
   const mActivity = document.getElementById('mActivity');
 
-  if (mStars) mStars.textContent = fmt(d.stars);
-  if (mForks) mForks.textContent = fmt(d.forks);
-  if (mIssues) mIssues.textContent = fmt(d.issues);
+  if (mStars) { mStars.textContent = fmt(d.stars); mStars.classList.remove('gh-stat-loading'); }
+  if (mForks) { mForks.textContent = fmt(d.forks); mForks.classList.remove('gh-stat-loading'); }
+  if (mIssues) { mIssues.textContent = fmt(d.issues); mIssues.classList.remove('gh-stat-loading'); }
   if (mActivity) {
     const act = d.activity || 'moderate';
     mActivity.textContent = act.charAt(0).toUpperCase() + act.slice(1);
-    mActivity.className = act === 'active' || act === 'high' || act === 'hot' ? 'gh-stat-item text-green-500' : 'gh-stat-item text-blue-400';
+    mActivity.className = act === 'active' || act === 'high' || act === 'hot' ? 'gh-activity-hot' : 'gh-activity-normal';
   }
 
   if (gfi !== null) {
@@ -1336,6 +1336,57 @@ function updateModalGHStats(org, d, gfi) {
     placeholders.forEach(p => p.textContent = fmt(gfi));
   }
 }
+
+function setGHStatsLoading() {
+  const container = document.getElementById('mGHStats');
+  if (container) container.setAttribute('aria-busy', 'true');
+  ['mStars', 'mForks', 'mIssues'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = ''; el.classList.add('gh-stat-loading'); }
+  });
+  const mActivity = document.getElementById('mActivity');
+  if (mActivity) { mActivity.textContent = ''; mActivity.className = 'gh-activity-normal gh-stat-loading'; }
+  const btn = document.getElementById('mFetchBtn');
+  if (btn) { btn.textContent = 'Fetching…'; btn.disabled = true; }
+}
+
+function showGHStatsError() {
+  const container = document.getElementById('mGHStats');
+  if (container) container.removeAttribute('aria-busy');
+  ['mStars', 'mForks', 'mIssues'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = '—'; el.classList.remove('gh-stat-loading'); }
+  });
+  const mActivity = document.getElementById('mActivity');
+  if (mActivity) { mActivity.textContent = '—'; mActivity.className = 'gh-activity-normal'; }
+  const btn = document.getElementById('mFetchBtn');
+  if (btn) { btn.textContent = 'Retry'; btn.disabled = false; }
+}
+
+// Auto-fetch on modal open: cache-first (1h TTL via fetchGH), non-blocking.
+// Mirrored in index.html (see CONTRIBUTING.md JavaScript Logic Duplication Warning).
+async function autoLoadModalGH(org) {
+  if (!org.github) return;
+
+  const cached = ghCache[org.github];
+  if (cached && Date.now() - cached.ts < 3600000) {
+    updateModalGHStats(org, cached, null);
+    const btn = document.getElementById('mFetchBtn');
+    if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
+    return;
+  }
+
+  setGHStatsLoading();
+  const d = await fetchGH(org.github);
+  if (d) {
+    updateModalGHStats(org, d, null);
+    const btn = document.getElementById('mFetchBtn');
+    if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
+  } else {
+    showGHStatsError();
+  }
+}
+globalThis.autoLoadModalGH = autoLoadModalGH;
 
 globalThis.fetchModalGH = async function () {
   const header = document.querySelector('#orgModal #orgModalTitle');
@@ -1451,27 +1502,10 @@ globalThis.openModal = function (name, triggerElement = null) {
   }
 
   const gh = org._gh;
-  const mStars = document.getElementById('mStars');
-  const mForks = document.getElementById('mForks');
-  const mIssues = document.getElementById('mIssues');
-  const mActivity = document.getElementById('mActivity');
-
-  if (mStars) mStars.textContent = gh ? fmt(gh.stars) : '—';
-  if (mForks) mForks.textContent = gh ? fmt(gh.forks) : '—';
-  if (mIssues) mIssues.textContent = gh ? fmt(gh.issues) : '—';
-  if (mActivity) {
-    const act = gh ? (gh.activity || 'moderate') : 'moderate';
-    mActivity.textContent = act.charAt(0).toUpperCase() + act.slice(1);
-    mActivity.className = act === 'active' || act === 'high' || act === 'hot' ? 'gh-stat-item text-green-500' : 'gh-stat-item text-blue-400';
-  }
-
   if (gh && gh.gfi !== undefined) {
     const placeholders = document.querySelectorAll('.metric-card #mGfiPlaceholder');
     placeholders.forEach(p => p.textContent = fmt(gh.gfi));
   }
-
-  const mFetchBtn = document.getElementById('mFetchBtn');
-  if (mFetchBtn) mFetchBtn.textContent = gh ? '↻ Refresh' : 'Fetch Live Stats';
 
   const mTech = document.getElementById('mTech');
   if (mTech) mTech.innerHTML = org.tags.map(t => safeHTML`<span class="tech-tag">${t}</span>`).join('');
@@ -1540,6 +1574,8 @@ globalThis.openModal = function (name, triggerElement = null) {
 
   renderMentorContactSection(org);
   openModalElement('orgModal', triggerElement);
+
+  autoLoadModalGH(org);
 
   // Lazily retrieve GFIs if missing
   if (org.github && (org._gh?.gfi === null || org._gh?.gfi === undefined)) {
@@ -2627,6 +2663,7 @@ if (typeof module !== 'undefined' && module.exports) {
     closeModal,
     safeHTML,
     rawHTML,
-    renderGoodFirstIssues
+    renderGoodFirstIssues,
+    autoLoadModalGH
   };
 }
